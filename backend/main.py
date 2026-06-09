@@ -2,6 +2,8 @@ import os, shutil, tempfile
 import chromadb
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from ingest import ingest_pdf
 from debate import run_debate
 
@@ -46,3 +48,8 @@ def clear_docs():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+# Serve React frontend — must be last
+static_path = os.path.join(os.path.dirname(__file__), "static")
+if os.path.exists(static_path):
+    app.mount("/", StaticFiles(directory=static_path, html=True), name="static")

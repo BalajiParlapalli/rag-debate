@@ -2,7 +2,7 @@ import { useState } from "react";
 import EvidencePanel from "../components/EvidencePanel";
 import Transcript from "../components/Transcript";
 
-const API = "http://localhost:8000";
+const API = "";
 
 const STEPS = [
   "Retrieving evidence…",
