@@ -1,3 +1,7 @@
 
 start.ps1
 start.ps1.txt
+
+backend/chroma_db/
+frontend/node_modules/
+frontend/dist/
