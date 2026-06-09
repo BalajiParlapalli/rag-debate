@@ -7,11 +7,11 @@ def run_debate(question: str) -> dict:
     anti_ev = retrieve(question, "anti")
 
     pro_arg = pro_agent(question, pro_ev)
-    time.sleep(5)
+    time.sleep(2)
     anti_arg = anti_agent(question, anti_ev)
-    time.sleep(5)
+    time.sleep(2)
     cross = cross_exam_agent(pro_arg, anti_arg, pro_ev, anti_ev)
-    time.sleep(5)
+    time.sleep(2)
     verdict = judge_agent(question, pro_arg, anti_arg, cross, pro_ev, anti_ev)
 
     return {

@@ -10,35 +10,51 @@ def call_gemini(prompt: str) -> str:
     )
     return response.text
 
-def pro_agent(question, evidence):
-    ev = "\n".join([f"[{e['id']}] ({e['source']}): {e['text']}" for e in evidence])
-    return call_gemini(f"""You argue FOR: "{question}"
-Use ONLY this evidence. Every claim must cite a [chunk_id].
+def extract_sides(question: str) -> tuple:
+    """Extract FOR and AGAINST labels from question like 'A vs B' or 'Should X'"""
+    q = question.strip()
+    for sep in [" vs ", " versus ", " or "]:
+        if sep in q.lower():
+            parts = re.split(sep, q, flags=re.IGNORECASE, maxsplit=1)
+            if len(parts) == 2:
+                return parts[0].strip(), parts[1].strip()
+    return "For", "Against"
 
-EVIDENCE:
-{ev}
+def pro_agent(question, evidence):
+    for_label, _ = extract_sides(question)
+    if evidence:
+        ev = "\n".join([f"[{e['id']}] ({e['source']}): {e['text']}" for e in evidence])
+        evidence_section = f"Use ONLY this evidence. Every claim must cite a [chunk_id].\n\nEVIDENCE:\n{ev}"
+    else:
+        evidence_section = "No documents uploaded. Use your general knowledge. Be factual."
+
+    return call_gemini(f"""You argue FOR "{for_label}" in this debate: "{question}"
+{evidence_section}
 
 Write a strong opening argument (3-4 paragraphs).""")
 
 def anti_agent(question, evidence):
-    ev = "\n".join([f"[{e['id']}] ({e['source']}): {e['text']}" for e in evidence])
-    return call_gemini(f"""You argue AGAINST: "{question}"
-Use ONLY this evidence. Every claim must cite a [chunk_id].
+    _, against_label = extract_sides(question)
+    if evidence:
+        ev = "\n".join([f"[{e['id']}] ({e['source']}): {e['text']}" for e in evidence])
+        evidence_section = f"Use ONLY this evidence. Every claim must cite a [chunk_id].\n\nEVIDENCE:\n{ev}"
+    else:
+        evidence_section = "No documents uploaded. Use your general knowledge. Be factual."
 
-EVIDENCE:
-{ev}
+    return call_gemini(f"""You argue FOR "{against_label}" in this debate: "{question}"
+{evidence_section}
 
 Write a strong opposing argument (3-4 paragraphs).""")
 
 def cross_exam_agent(pro_arg, anti_arg, pro_ev, anti_ev):
-    p = "\n".join([f"[{e['id']}]: {e['text']}" for e in pro_ev])
-    a = "\n".join([f"[{e['id']}]: {e['text']}" for e in anti_ev])
+    p = "\n".join([f"[{e['id']}]: {e['text']}" for e in pro_ev]) if pro_ev else "General knowledge used."
+    a = "\n".join([f"[{e['id']}]: {e['text']}" for e in anti_ev]) if anti_ev else "General knowledge used."
     result = call_gemini(f"""You are a cross-examiner. Find weaknesses and uncited claims.
 
-PRO ARGUMENT: {pro_arg}
-ANTI ARGUMENT: {anti_arg}
-PRO EVIDENCE: {p}
-ANTI EVIDENCE: {a}
+SIDE A ARGUMENT: {pro_arg}
+SIDE B ARGUMENT: {anti_arg}
+SIDE A EVIDENCE: {p}
+SIDE B EVIDENCE: {a}
 
 Respond ONLY with JSON, no markdown:
 {{"attack_on_pro": ["..."], "attack_on_anti": ["..."]}}""")
@@ -50,14 +66,15 @@ Respond ONLY with JSON, no markdown:
 def judge_agent(question, pro_arg, anti_arg, cross, pro_ev, anti_ev):
     result = call_gemini(f"""You are a neutral judge for: "{question}"
 
-PRO: {pro_arg}
-ANTI: {anti_arg}
+SIDE A: {pro_arg}
+SIDE B: {anti_arg}
 CROSS-EXAM: {cross}
 
 Score each side 1-10 on: groundedness, evidence_diversity, contradiction_handling, persuasiveness.
 Respond ONLY with JSON, no markdown:
-{{"pro_scores":{{...}}, "anti_scores":{{...}}, "winner":"Pro or Anti", "verdict":"one sentence reason"}}""")
+{{"pro_scores":{{...}}, "anti_scores":{{...}}, "winner":"Side A or Side B", "verdict":"one sentence reason"}}""")
     try:
         return json.loads(re.sub(r"```json|```", "", result).strip())
     except:
         return {"winner": "Unknown", "verdict": result, "pro_scores": {}, "anti_scores": {}}
+    

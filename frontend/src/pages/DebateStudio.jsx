@@ -4,9 +4,18 @@ import Transcript from "../components/Transcript";
 
 const API = "http://localhost:8000";
 
+const STEPS = [
+  "Retrieving evidence…",
+  "Building Pro argument…",
+  "Building Anti argument…",
+  "Cross-examining…",
+  "Judge scoring…",
+];
+
 export default function DebateStudio({ onResult, lastResult }) {
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState(0);
   const [result, setResult] = useState(lastResult || null);
   const [error, setError] = useState("");
   const [tab, setTab] = useState("transcript");
@@ -16,6 +25,12 @@ export default function DebateStudio({ onResult, lastResult }) {
     setLoading(true);
     setError("");
     setResult(null);
+    setStep(0);
+
+    const stepInterval = setInterval(() => {
+      setStep((s) => (s < STEPS.length - 1 ? s + 1 : s));
+    }, 4000);
+
     try {
       const res = await fetch(`${API}/debate`, {
         method: "POST",
@@ -29,7 +44,9 @@ export default function DebateStudio({ onResult, lastResult }) {
     } catch (e) {
       setError(e.message);
     } finally {
+      clearInterval(stepInterval);
       setLoading(false);
+      setStep(0);
     }
   }
 
@@ -43,23 +60,28 @@ export default function DebateStudio({ onResult, lastResult }) {
   return (
     <div>
       <h1 style={{ margin: "0 0 6px", fontSize: 22, fontWeight: 600, color: "#e8e6e1" }}>Debate Studio</h1>
-      <p style={{ margin: "0 0 28px", color: "#6b6b75", fontSize: 14 }}>Ask a question — Pro and Anti agents argue using your uploaded documents.</p>
+      <p style={{ margin: "0 0 28px", color: "#6b6b75", fontSize: 14 }}>
+        Ask any question — upload PDFs for grounded debates, or debate from general knowledge.
+      </p>
 
-      <div style={{ display: "flex", gap: 10, marginBottom: 24 }}>
+     <div style={{ display: "flex", gap: 10, marginBottom: 8 }}>
         <input
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && runDebate()}
-          placeholder="e.g. Should AI replace college education?"
+          onKeyDown={(e) => e.key === "Enter" && !loading && runDebate()}
+          placeholder="e.g. remote work vs office work"
           style={{ flex: 1, padding: "12px 16px", borderRadius: 8, border: "1px solid #2a2a30", background: "#18181c", color: "#e8e6e1", fontSize: 14, outline: "none" }}
         />
         <button
           onClick={runDebate}
           disabled={loading || !question.trim()}
-          style={{ padding: "12px 24px", borderRadius: 8, border: "none", cursor: "pointer", background: loading ? "#2a2a30" : "#6366f1", color: "#fff", fontSize: 14, fontWeight: 600 }}
+          style={{ padding: "12px 24px", borderRadius: 8, border: "none", cursor: loading ? "not-allowed" : "pointer", background: loading ? "#2a2a30" : "#6366f1", color: "#fff", fontSize: 14, fontWeight: 600 }}
         >
           {loading ? "Running…" : "Start Debate ↗"}
         </button>
+      </div>
+      <div style={{ fontSize: 12, color: "#4a4a5a", marginBottom: 24 }}>
+        💡 Tip: Frame as "A vs B" for clearer debates — e.g. "remote work vs office work" or "Tesla vs traditional cars"
       </div>
 
       {error && (
@@ -70,16 +92,28 @@ export default function DebateStudio({ onResult, lastResult }) {
 
       {loading && (
         <div style={{ padding: "32px", textAlign: "center", color: "#6b6b75", fontSize: 14 }}>
-          <div style={{ marginBottom: 12, fontSize: 24 }}>⚖️</div>
-          Retrieving evidence and building arguments…
+          <div style={{ marginBottom: 16, fontSize: 28 }}>⚖️</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
+            {STEPS.map((s, i) => (
+              <div key={i} style={{
+                fontSize: 13, padding: "6px 16px", borderRadius: 20,
+                background: i === step ? "#1e1e3a" : "transparent",
+                color: i < step ? "#4ade80" : i === step ? "#a5b4fc" : "#3a3a44",
+                fontWeight: i === step ? 600 : 400,
+                transition: "all 0.3s",
+              }}>
+                {i < step ? "✓ " : i === step ? "→ " : "  "}{s}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
       {result && (
         <>
           <div style={{ padding: "16px 20px", borderRadius: 10, marginBottom: 20, background: "#1a1f1a", border: "1px solid #2a4a2a" }}>
-            <div style={{ fontSize: 12, color: "#4ade80", fontWeight: 600, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-              🏆 Winner: {result.verdict?.winner || "—"}
+            <div style={{ fontSize: 11, color: "#4ade80", fontWeight: 600, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+              🏆 Winner: {result.verdict?.winner || "—"} · {result.question}
             </div>
             <div style={{ fontSize: 14, color: "#a0c0a0" }}>{result.verdict?.verdict}</div>
           </div>
@@ -96,8 +130,8 @@ export default function DebateStudio({ onResult, lastResult }) {
           {tab === "evidence" && <EvidencePanel result={result} />}
           {tab === "cross-exam" && (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-              <CrossCard title="Attacks on Pro" items={result.cross_exam?.attack_on_pro} color="#f87171" />
-              <CrossCard title="Attacks on Anti" items={result.cross_exam?.attack_on_anti} color="#fb923c" />
+              <CrossCard title="Attacks on Side A" items={result.cross_exam?.attack_on_pro} color="#f87171" />
+              <CrossCard title="Attacks on Side B" items={result.cross_exam?.attack_on_anti} color="#fb923c" />
             </div>
           )}
         </>
@@ -111,8 +145,8 @@ function CrossCard({ title, items = [], color }) {
     <div style={{ background: "#18181c", border: "1px solid #2a2a30", borderRadius: 10, padding: 20 }}>
       <div style={{ fontSize: 13, fontWeight: 600, color, marginBottom: 14 }}>{title}</div>
       {items.map((item, i) => (
-        <div key={i} style={{ fontSize: 13, color: "#9090a0", marginBottom: 10, paddingLeft: 12, borderLeft: "2px solid #2a2a30" }}>
-          {item}
+        <div key={i} style={{ fontSize: 13, color: "#9090a0", marginBottom: 10, paddingLeft: 12, borderLeft: "2px solid #2a2a30", lineHeight: 1.6 }}>
+          • {item}
         </div>
       ))}
       {items.length === 0 && <div style={{ color: "#444", fontSize: 13 }}>No attacks found.</div>}
